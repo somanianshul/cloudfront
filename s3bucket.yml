@@ -1,0 +1,18 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS S3 bucket Cloud Front Template'
+Parameters: 
+  BucketName: 
+    Description: 'Cloud Front - S3 bucket'
+    Type: 'String'
+    Default: 'anshulsomanicloudfronttestbucket'
+Resources: 
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName:
+        Ref: BucketName
+Outputs:
+  S3BucketName:
+    Value:
+      Ref: S3Bucket
+    Description: 'Name of S3 Bucket'
