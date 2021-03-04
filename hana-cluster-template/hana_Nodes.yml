@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: 'HANA Cluster - AWS HANA Nodes Cloud Front Template'
+
+Parameters:
+
+  VPCID:
+    Type: 'String'
+    Description: 'VPC ID from the VPC Stack'
+
+  SubnetIDAZ1:
+    Type: 'String'
+    Description: 'Subnet ID of Privet Subnet in AZ1 from VPC Stack'
+
+  SubnetIDAZ2:
+    Type: 'String'
+    Description: 'Subnet ID of Privet Subnet in AZ2 from VPC Stack'
+
+  KeyID:
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Description: 'Key Pair to launch the Instance'
+    Default: 'sandbox-anshul'
+
+Mappings:
+
+  DeviceName:
+    Node:
+      Shared: 'sdg'
+      Data: 'sdh'
+
+  RegionMap:
+    us-east-1:
+      AMI: ami-1eeab909
+    us-west-2:
+      AMI: ami-d2627db3
+    ap-southeast-2:
+      AMI: ami-0f510a6c
+
+Resources:
+
+  AllowAll:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Allow All inbound Traffic'
+      SecurityGroupIngress: 
+        IpProtocol: '-1'
+        CidrIP: '0.0.0.0/0'
+        FromPort: '0'
+        ToPort: '65535'
+
+  HanaSharedVolume1:
+    Type: 'AWS::EC2::Volume'
+    Properties:
+      AvailabilityZone: !GetAtt HanaNode1.AvailabilityZone 
+      Size: 10
+      VolumeTYpe: 'gp2' 
+      Tags:
+      - Key: 'Name'
+        Value: 'HanaNode1-HANA-Shared'
+
+  HanaSharedVolume1Attachment:
+    Type: 'AWS::EC2::VolumeAttachment'
+    DependsOn: [ 'HanaSharedVolume1', 'HanaNode1' ] 
+    Properties:
+      InstanceID: !Ref HanaNode1
+      VolumeID: !Ref HanaSharedVolume1
+      Device: !Join [ "", [ '/dev/', !FindInMap [ DeviceName, Node, Shared ] ] ]
+  
+  HanaSharedVolume2:
+    Type: 'AWS::EC2::Volume'
+    Properties:
+      AvailabilityZone: !GetAtt HanaNode2.AvailabilityZone 
+      Size: 10
+      VolumeTYpe: 'gp2' 
+      Tags:
+      - Key: 'Name'
+        Value: 'HanaNode2-HANA-Shared'
+
+  HanaSharedVolume2Attachment:
+    Type: 'AWS::EC2::VolumeAttachment'
+    DependsOn: [ 'HanaSharedVolume2', 'HanaNode2' ]
+    Properties:
+      InstanceID: !Ref HanaNode2
+      VolumeID: !Ref HanaSharedVolume2
+      Device: !Join [ "", [ '/dev/', !FindInMap [ DeviceName, Node, Shared ] ] ]
+
+  HanaDataVolume1:
+    Type: 'AWS::EC2::Volume'
+    Properties:
+      AvailabilityZone: !GetAtt HanaNode1.AvailabilityZone 
+      Size: 20
+      VolumeTYpe: 'gp2' 
+      Tags:
+      - Key: 'Name'
+        Value: 'HanaNode1-HANA-Data'
+
+  HanaDataVolume1Attachment:
+    Type: 'AWS::EC2::VolumeAttachment'
+    DependsOn: [ 'HanaDataVolume1', 'HanaNode1' ]
+    Properties:
+      InstanceID: !Ref HanaNode1
+      VolumeID: !Ref HanaDataVolume1
+      Device: !Join [ "", [ '/dev/', !FindInMap [ DeviceName, Node, Data ] ] ]
+
+  HanaDataVolume2:
+    Type: 'AWS::EC2::Volume'
+    Properties:
+      AvailabilityZone: !GetAtt HanaNode2.AvailabilityZone 
+      Size: 20
+      VolumeTYpe: 'gp2' 
+      Tags:
+      - Key: 'Name'
+        Value: 'HanaNode2-HANA-Data'
+
+  HanaDataVolume2Attachment:
+    Type: 'AWS::EC2::VolumeAttachment'
+    DependsOn: [ 'HanaDataVolume2', 'HanaNode2' ]
+    Properties:
+      InstanceID: !Ref HanaNode2
+      VolumeID: !Ref HanaDataVolume2
+      Device: !Join [ "", [ '/dev/', !FindInMap [ DeviceName, Node, Data ] ] ]
+
+  HanaNode1:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageID: !FindInMap [ RegionMap, !Ref 'AWS::Region', AMI ]
+      InstanceType: 't2.micro'
+      KeyName: !Ref KeyID
+      SubnetId: !Ref SubnetIDAZ1
+      EbsOptimized: 'True'
+      Monitoring: 'True'
+      SecurityGroupIds: !Ref AllowAll
+      BlockDeviceMappings: 
+        - DeviceName: '/dev/sda1'
+          Ebs: 
+            VolumeType: 'gp2'
+            DeleteOnTermination: 'false'
+            VolumeSize: '20'
+      Tags:
+      - Key: 'Name'
+        Value: 'HanaNode1'
+
+  HanaNode2:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageID: !FindInMap [ RegionMap, !Ref 'AWS::Region', AMI ]
+      InstanceType: 't2.micro'
+      KeyName: !Ref KeyID
+      SubnetId: !Ref SubnetIDAZ2
+      EbsOptimized: 'True'
+      Monitoring: 'True'
+      SecurityGroupIds: !Ref AllowAll
+      BlockDeviceMappings: 
+        - DeviceName: '/dev/sda1'
+          Ebs: 
+            VolumeType: 'gp2'
+            DeleteOnTermination: 'false'
+            VolumeSize: '20'
+      Tags:
+      - Key: 'Name'
+        Value: 'HanaNode2'
+
+
+
+
+
+
+

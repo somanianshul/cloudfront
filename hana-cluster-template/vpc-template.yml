@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: 'HANA Cluster - AWS VPC Cloud Front Template'
+
+Parameters:
+
+  CidrRange:
+    Type: 'String'
+    Description: 'CIDR Range for the Test HanaVPC'
+    Default: '10.250.0.0'
+
+Mappings:
+
+  SubnetRanges:
+    Public:
+      AZ1: '10.250.1.0/24'
+      AZ2: '10.250.2.0/24'  
+    Private:
+      AZ1: '10.250.3.0/24'
+      AZ2: '10.250.4.0/24'
+
+Resources:
+  HanaVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties: 
+      CidrBlock: !Join [ "", [ Ref: CidrRange, '/16' ] ]
+      EnableDnsSupport: 'True'
+      EnableDnsHostnames: 'True'
+      Tags:
+      - Key: 'Name'
+        Value: !Join [ "", [ Ref: 'AWS::StackName', '-VPC' ] ]
+
+  PublicSubnetAZ1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '0', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ SubnetRanges, Public, AZ1 ]
+      MapPublicIpOnLaunch: 'True'
+      VpcId: !Ref HanaVPC
+      Tags:
+      - Key: 'Name'
+        Value: !Join [ "", [ Ref: 'AWS::StackName', '-PublicSubnetAZ1' ] ]
+  
+  PublicSubnetAZ2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '1', !GetAZs  { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ SubnetRanges, Public, AZ2 ]
+      MapPublicIpOnLaunch: 'True'
+      VpcId: !Ref HanaVPC
+      Tags:
+      - Key: 'Name'
+        Value: !Join [ "", [ Ref: 'AWS::StackName', '-PublicSubnetAZ2' ] ]
+
+  PrivateSubnetAZ1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '0', !GetAZs { Ref: 'AWS::Region' } ] 
+      CidrBlock: !FindInMap [ SubnetRanges, Private, AZ1 ]
+      MapPublicIpOnLaunch: 'False'
+      VpcId: !Ref HanaVPC
+      Tags:
+      - Key: 'Name'
+        Value: !Join [ "", [ Ref: 'AWS::StackName', '-PrivateSubnetAZ1' ] ]
+
+  PrivateSubnetAZ2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [ '1', !GetAZs { Ref: 'AWS::Region' } ]
+      CidrBlock: !FindInMap [ SubnetRanges, Private, AZ2 ]
+      MapPublicIpOnLaunch: 'False'
+      VpcId: !Ref HanaVPC
+      Tags:
+      - Key: 'Name'
+        Value: !Join [ "", [ Ref: 'AWS::StackName', '-PrivateSubnetAZ2' ] ]
+
+  IGWHanaVPC:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: 'Name'
+        Value: !Join [ "", [ Ref: 'AWS::StackName', '-IGW' ] ]
+
+  IGWAHanaVPC:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref IGWHanaVPC
+      VpcId: !Ref HanaVPC
+  
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref HanaVPC
+      Tags:
+      - Key: 'Name'
+        Value: 'PublicRouteTable'
+
+  PrivateRouteTableAZ1:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref HanaVPC
+      Tags:
+      - Key: 'Name'
+        Value: 'PrivateRouteTableAZ1'
+
+  PrivateRouteTableAZ2:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref HanaVPC
+      Tags:
+      - Key: 'Name'
+        Value: 'PrivateRouteTableAZ2'
+
+  DefaultRouteAssociationPublicAZ1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnetAZ1
+      RouteTableId: !Ref PublicRouteTable 
+
+  DefaultRouteAssociationPublicAZ2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnetAZ2
+      RouteTableId: !Ref PublicRouteTable
+  
+  DefaultRouteAssociationPrivateAZ1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnetAZ1
+      RouteTableId: !Ref PrivateRouteTableAZ1
+
+  DefaultRouteAssociationPrivateAZ2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnetAZ2
+      RouteTableId: !Ref PrivateRouteTableAZ2
+
+  DefaultPublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: IGWHanaVPC
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref IGWHanaVPC
+
+  EIPNATAZ1:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'VPC'
+
+  NATAZ1:
+    Type: 'AWS::EC2::NatGateway'
+    DependsOn: IGWAHanaVPC
+    Properties:
+      AllocationId: !GetAtt EIPNATAZ1.AllocationId
+      SubnetId: !Ref PublicSubnetAZ1
+
+  NATAZ1Route:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableAZ1
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref NATAZ1
+
+  EIPNATAZ2:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'VPC'
+
+  NATAZ2:
+    Type: 'AWS::EC2::NatGateway'
+    DependsOn: IGWAHanaVPC
+    Properties:
+      AllocationId: !GetAtt EIPNATAZ2.AllocationId
+      SubnetId: !Ref PublicSubnetAZ2
+
+  NATAZ2Route:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableAZ2
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref NATAZ2
+
+Outputs:
+  VPCID:
+    Value: !Ref HanaVPC
+  ElasticIP1:
+    Value: !Ref EIPNATAZ1
+  ElasticIP2:
+    Value: !Ref EIPNATAZ2
+  SubnetPublicAZ1:
+    Value: !Ref PublicSubnetAZ1
+  SubnetPublicAZ2:
+    Value: !Ref PublicSubnetAZ2
+  SubnetPrivateAZ1:
+    Value: !Ref PrivateSubnetAZ1
+  SubnetPrivateAZ2:
+    Value: !Ref PublicSubnetAZ2
+  DefaultSG:
+    Value: !GetAtt HanaVPC.DefaultSecurityGroup
